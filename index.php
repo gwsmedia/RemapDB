@@ -19,7 +19,7 @@ if(!isset($_GET['migration']) || !is_file("migrations/$migration.php")) {
 require_once('config.php');
 require_once('inc/db.php');
 
-global $source_db;
+global $source_db, $dest_db;
 $source_db = new DB('mysql', SOURCE_DB_HOST, SOURCE_DB_NAME, SOURCE_DB_USER, SOURCE_DB_PASSWORD);
 $dest_db = new DB('mysql', DEST_DB_HOST, DEST_DB_NAME, DEST_DB_USER, DEST_DB_PASSWORD);
 
@@ -44,23 +44,24 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
   }
 
   global $destInsertVals;
-  $insertedRows = array();
+  $destInsertVals = array();
+  $insertedSourceKeys = array();
   $sourceData = $source_db->query(build_query($tables, $mapping));
   $tableAliases = collect_tables_aliases($tables);
 
   foreach($sourceData as $sourceRow) {
-    $destInsertVals = array();
     foreach($mapping as $destTableData) {
       $values = array();
       $table = $destTableData['table'];
       $columns = $destTableData['columns'];
       $primaryKey = get_primary_key_value($sourceRow, $tableAliases, $destTableData);
 
+      if(!$primaryKey) continue;
       foreach($columns as $destCol => $sourceValue) {
         if(!evaluate_value_mapping($values, $destCol, $sourceValue, $sourceRow, $tables, $tableAliases)) continue 2;
       }
 
-      if(count($values) > 0 && (!isset($insertedRows[$table]) || !in_array($primaryKey, $insertedRows[$table]))) {
+      if(count($values) > 0 && (!isset($insertedSourceKeys[$table]) || !in_array($primaryKey, $insertedSourceKeys[$table]))) {
         $destInsertVals[$table][] = $values;
         $colClause = implode(', ', array_keys($values));
 
@@ -83,7 +84,7 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
           Logger::vdp($values, true);
           return;
         } else {
-          $insertedRows[$table][] = $primaryKey;
+          $insertedSourceKeys[$table][] = $primaryKey;
         }
 
         $colsByVal = array_flip(array_filter($columns, 'is_string'));
@@ -96,7 +97,7 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
     }
   }
 
-  foreach($insertedRows as $table => $inserted) {
+  foreach($insertedSourceKeys as $table => $inserted) {
     echo "$table: inserted " . count($inserted) . " rows<br>";
   }
 }
@@ -108,7 +109,11 @@ function get_primary_key_value($sourceRow, $tableAliases, $destTableData) {
   $alias = $tableAliases[$controlTable];
   $keyCols = $primaryKeys[$alias];
   $keyValues = array();
-  foreach($keyCols as $keyCol) $keyValues[] = $sourceRow["{$alias}_{$keyCol}"];
+  foreach($keyCols as $keyCol) {
+    $keyVal =  $sourceRow["{$alias}_{$keyCol}"];
+    if(is_null($keyVal)) return false;
+    else $keyValues[] = $keyVal;
+  }
   return implode("__", $keyValues);
 }
 
@@ -172,7 +177,7 @@ function evaluate_value_mapping(&$values, $destCol, $sourceValue, $sourceRow, $t
           } else {
             $val = $sourceRow[$colName];
           }
-        }
+        } else return true;
       } else {
         return false;
       }
@@ -263,7 +268,7 @@ function get_table_condition_column($alias, $tables) {
 function evaluate_table_condition($alias, $tables) {
   $condition = $tables[$alias]['conditions'];
   if(preg_match('/^[0-9,a-z,A-Z$_]+$/', trim($condition))) {
-    $condition = preg_replace('/([\^=<>\s])'.$condition.'./', '$1'.$alias.'.', $tables[$condition]['conditions']);
+    $condition = preg_replace('/(^|[=<>\s])'.$condition.'./', '$1'.$alias.'.', $tables[$condition]['conditions']);
   }
 
   return $condition;
