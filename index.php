@@ -1,5 +1,15 @@
 <?php
 
+/********
+ *
+ * Please note: I am acutely aware this file is a mess
+ * It was written on a time limit
+ * I am going to refactor it into OOP when I have time
+ *
+ ********/
+
+
+
 $start = microtime(true);
 
 ini_set('display_errors', '1');
@@ -133,27 +143,46 @@ function get_primary_key_value($sourceRow, $tableAliases, $destTableData) {
 }
 
 
-function evaluate_if_user_func(&$values, $mappingValue, $destCol, $sourceRow, $alias = null) {
+function evaluate_if_user_func(&$values, $mappingValue, $destCol, $sourceRow, $alias = null, $useDestValues = false) {
   if(strpos($mappingValue, 'FUNC_') === 0) {
     preg_match('/^FUNC_(.*?)\((.*?)\)$/', $mappingValue, $matches);
 
-    if(is_null($alias)) {
-      $colName = $matches[2];
-      if(isset($values[$colName])) {
-        $param = $values[$colName];
-      } else {
-        // TODO: THROW ERROR
-      }
-    } else {
-      $colName = "{$alias}_{$matches[2]}";
-      if (isset($sourceRow[$colName])) {
-        $param = $sourceRow[$colName];
-      } else {
-        // TODO: THROW ERROR
-      }
+    $finalParams = array();
+    $userParams = explode(',', $matches[2]);
+    foreach($userParams as $userParam) {
+        $userParam = trim($userParam);
+        // TODO: Add support for float params
+        if($userParam == 'true' || $userParam == 'false') {
+            // If bool
+            $finalParams[] = boolval($userParam);
+        } else if(preg_match('/^\d+$/', $userParam)) {
+            // If int
+            $finalParams[] = intval($userParam);
+        } else if(strpos($userParam, 'RAW_') === 0) {
+            $colName = str_replace('RAW_', '', $userParam);
+            $finalParams[] = $sourceRow[$colName];
+        } else if(preg_match('/^(\'|")(.*?)\1$/', $userParam, $paramMatches)) {
+            // If literal string value passed
+            $finalParams[] = $paramMatches[2];
+        } else {
+            // Else get value from rows
+            if (is_null($alias)) {
+                $colName = $userParam;
+                $row = $useDestValues ? $sourceRow : $values;
+            } else {
+                $colName = "{$alias}_{$userParam}";
+                $row = $sourceRow;
+            }
+
+            if (isset($row[$colName])) {
+                $finalParams[] = $row[$colName];
+            } else {
+                // TODO: THROW ERROR
+            }
+        }
     }
 
-    $values[$destCol] = call_user_func($matches[1], $param);
+    $values[$destCol] = call_user_func_array($matches[1], $finalParams);
     return true;
   }
 
@@ -194,8 +223,16 @@ function evaluate_value_mapping(&$values, $destCol, $sourceValue, $sourceRow, $t
     if(preg_match('/^DEST_(.*)$/', $sourceValue['table'], $matches)) {
       $tableName = $matches[1];
       if(isset($destInsertVals[$tableName])) {
-        $lastRowIndex = count($destInsertVals[$tableName]) - 1;
-        $val = $destInsertVals[$tableName][$lastRowIndex][$sourceValue['value']];
+          $lastRowIndex = count($destInsertVals[$tableName]) - 1;
+          $sourceRow = $destInsertVals[$tableName][$lastRowIndex];
+          $mappingValue = $sourceValue['value'];
+          // TOOO: line below also used at start of function below. Move alternative mapping (else clause) into function?
+          if(strpos($mappingValue, 'FUNC_') === 0) {
+              return evaluate_if_user_func($values, $mappingValue, $destCol, $sourceRow, null, true);
+          } else {
+              $val = $sourceRow[$mappingValue];
+          }
+//          }
       } else {
         // echo "ERROR: Dest col not found";
         // TODO: THROW ERROR ?
@@ -252,13 +289,29 @@ function collect_columns($tables, $mapping) {
   foreach(array_column($mapping, 'columns') as $destData) {
     foreach($destData as $sourceData) {
       if (is_array($sourceData) && isset($tableAliases[$sourceData['table']])) {
-        preg_match('/^(?:FUNC_.+?\()?(.+?)\)?$/', trim($sourceData['value']), $matches);
+            // TODO: Move regex to constant or property in OOP
+        preg_match('/^(FUNC_.+?\()?(.+?)(?(1)\)|)$/', trim($sourceData['value']), $matches);
         $alias = $tableAliases[$sourceData['table']];
-        $colsToAdd = array($matches[1], get_table_condition_column($alias, $tables));
+        $colsToAdd = array($matches[2], get_table_condition_column($alias, $tables));
 
+        // TODO: rename $colToAdd
         foreach($colsToAdd as $colToAdd) {
-          $colsToPrepare[$alias][] = $colToAdd;
+          $splitCols = explode(',', str_replace(' ', '', $colToAdd));
+          $colToAdd = array_filter($splitCols, function($col) {
+              return !preg_match('/^("|\')?(?(1)[^\1]*\1|(\d+))$/', $col);
+          });
+          if(!isset($colsToPrepare[$alias])) $colsToPrepare[$alias] = array();
+          $colsToPrepare[$alias] = array_merge($colsToPrepare[$alias], $colToAdd);
         }
+      } else if(is_string($sourceData) && preg_match('/^(FUNC_.+?\()?(.+?)(?(1)\)|)$/', $sourceData, $matches)) {
+          $userParams = explode(',', $matches[2]);
+          foreach($userParams as $userParam) {
+              $userParam = trim($userParam);
+              // TODO: check $paramMatches[1] exists as an alias
+              if(preg_match('/^RAW_(.*?)_(.*?)$/', $userParam, $paramMatches)) {
+                  $colsToPrepare[$paramMatches[1]][] = $paramMatches[2];
+              }
+          }
       }
     }
   }
