@@ -35,10 +35,6 @@ global $source_db, $dest_db;
 $source_db = new DB('mysql', SOURCE_DB_HOST, SOURCE_DB_NAME, SOURCE_DB_USER, SOURCE_DB_PASSWORD);
 $dest_db = new DB('mysql', DEST_DB_HOST, DEST_DB_NAME, DEST_DB_USER, DEST_DB_PASSWORD);
 
-//$a = $dest_db->query(" INSERT INTO commerce_product ( `type`, `uuid`, `langcode`) VALUES (1, 3, 3)");
-//$a = $dest_db->query(" INSERT INTO commerce_number_pattern_sequence (`entity_id`, `store_id`, `number`, `generated`) VALUES ('def', 'def', 2, 3)");
-//Logger::vdp($a, true);
-
 require_once("migrations/$migration.php");
 
 run_migration($source_db, $dest_db, $tables, $mapping);
@@ -47,7 +43,6 @@ echo $newline . "Took " . (microtime(true) - $start) . " seconds" . $newline;
 
 
 function run_migration($source_db, $dest_db, $tables, $mapping) {
-//  Logger::vdp(build_query($tables, $mapping), true);
   if(DELETE_EXISTING_ROWS && !DEBUG) {
     foreach($mapping as $destTable) {
       $dest_db->query("DELETE FROM {$destTable['table']};");
