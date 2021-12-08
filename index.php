@@ -38,7 +38,7 @@ echo $newline . "Took " . (microtime(true) - $start) . " seconds" . $newline;
 
 function run_migration($source_db, $dest_db, $tables, $mapping) {
 //  Logger::vdp(build_query($tables, $mapping), true);
-  if(DELETE_EXISTING_ROWS) {
+  if(DELETE_EXISTING_ROWS && !DEBUG) {
     foreach($mapping as $destTable) {
       $dest_db->query("DELETE FROM {$destTable['table']};");
       $dest_db->query("ALTER TABLE {$destTable['table']} AUTO_INCREMENT = 1;");
@@ -48,7 +48,11 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
   global $newline, $destInsertVals;
   $destInsertVals = array();
   $insertedSourceKeys = array();
-  $sourceData = $source_db->query(build_query($tables, $mapping));
+
+  $selectQuery = build_query($tables, $mapping);
+  if(DEBUG) var_dump($selectQuery);
+
+  $sourceData = $source_db->query($selectQuery);
   $tableAliases = collect_tables_aliases($tables);
 
   foreach($sourceData as $sourceRow) {
@@ -79,21 +83,28 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
         }
         $valClause = substr($valClause, 0, -2);
         $query = "INSERT INTO {$table} ($colClause) VALUES ($valClause)";
-        $id = $dest_db->query($query, $queryParams);
-        if($id === false) {
-          // TODO: Throw error
-          echo "PROBLEM QUERY: " . $query;
-          Logger::vdp($values, true);
-          return;
+
+        if(DEBUG) {
+            var_dump($query);
+            var_dump($queryParams);
+            $id = 5;
+            // TODO: get dummy values for MySQL functions
         } else {
-          $insertedSourceKeys[$table][] = $primaryKey;
+            $id = $dest_db->query($query, $queryParams);
+            if ($id === false) {
+                // TODO: Throw error
+                echo "PROBLEM QUERY: " . $query;
+                Logger::vdp($values, true);
+                return;
+            }
         }
 
+        $insertedSourceKeys[$table][] = $primaryKey;
         $colsByVal = array_flip(array_filter($columns, 'is_string'));
         if (isset($colsByVal['AUTO'])) {
-          $idCol = $colsByVal['AUTO'];
-          $lastRowIndex = count($destInsertVals[$table]) - 1;
-          $destInsertVals[$table][$lastRowIndex][$idCol] = $id;
+            $idCol = $colsByVal['AUTO'];
+            $lastRowIndex = count($destInsertVals[$table]) - 1;
+            $destInsertVals[$table][$lastRowIndex][$idCol] = $id;
         }
       }
     }
