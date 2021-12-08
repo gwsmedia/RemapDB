@@ -1,6 +1,8 @@
 <?php
 
-define("DELETE_EXISTING_ROWS", true);
+define("DEBUG", false);
+
+define("DELETE_EXISTING_ROWS", false);
 
 define('SOURCE_DB_HOST', 'localhost');
 define('SOURCE_DB_USER', '');
