@@ -63,6 +63,8 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
       $primaryKey = get_primary_key_value($sourceRow, $tableAliases, $destTableData);
 
       if(!$primaryKey) continue;
+      if(isset($destTableData['condition']) && !evaluate_mapping_condition($destTableData['condition'], $sourceRow)) continue;
+
       foreach($columns as $destCol => $sourceValue) {
         if(!evaluate_value_mapping($values, $destCol, $sourceValue, $sourceRow, $tables, $tableAliases)) continue 2;
       }
@@ -156,6 +158,25 @@ function evaluate_if_user_func(&$values, $mappingValue, $destCol, $sourceRow, $a
   }
 
   return false;
+}
+
+
+function evaluate_mapping_condition($condition, $sourceRow) {
+    if(strpos($condition, 'FUNC_') === 0) {
+        // TODO: Add error handling + support multiple params / param types
+        // TODO: Allow negation
+        preg_match('/^FUNC_(.*?)\((.*?)\)$/', $condition, $matches);
+
+        $finalParams = array();
+        $userParams = explode(',', $matches[2]);
+
+        foreach ($userParams as $userParam) {
+            $userParam = trim($userParam);
+            $finalParams[] = $sourceRow[str_replace('RAW_', '', $userParam)];
+        }
+
+        return boolval(call_user_func_array($matches[1], $finalParams));
+    } else return true;
 }
 
 
