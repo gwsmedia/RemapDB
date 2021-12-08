@@ -6,12 +6,14 @@ ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
 error_reporting(E_ALL);
 
-if(isset($_GET['migration'])) {
-  $migration = $_GET['migration'];
+$cli = isset($migration);
+$newline = $cli ? "\n" : '<br>';
+if(!$cli && isset($_GET['migration'])) $migration = $_GET['migration'];
+if(isset($migration)) {
   $migration = strtolower(str_replace('-', '_', $migration));
 }
 
-if(!isset($_GET['migration']) || !is_file("migrations/$migration.php")) {
+if(!isset($migration) || !is_file("migrations/$migration.php")) {
   http_response_code(404);
   die('[404] That page could not be found.');
 }
@@ -31,7 +33,7 @@ require_once("migrations/$migration.php");
 
 run_migration($source_db, $dest_db, $tables, $mapping);
 
-echo "<br>Took " . (microtime(true) - $start) . " seconds";
+echo $newline . "Took " . (microtime(true) - $start) . " seconds" . $newline;
 
 
 function run_migration($source_db, $dest_db, $tables, $mapping) {
@@ -43,7 +45,7 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
     }
   }
 
-  global $destInsertVals;
+  global $newline, $destInsertVals;
   $destInsertVals = array();
   $insertedSourceKeys = array();
   $sourceData = $source_db->query(build_query($tables, $mapping));
@@ -98,7 +100,7 @@ function run_migration($source_db, $dest_db, $tables, $mapping) {
   }
 
   foreach($insertedSourceKeys as $table => $inserted) {
-    echo "$table: inserted " . count($inserted) . " rows<br>";
+    echo "$table: inserted " . count($inserted) . " rows" . $newline;
   }
 }
 
