@@ -1,5 +1,7 @@
 # RemapDB
 
+**Please note: this package has not been tested with PHP 8. It could also do with some refactoring. Both of these things are planned.**
+
 A tool for fairly complex DB migration and remapping with configuration files.
 
 You will need to setup a config and migration file. See the documentation below. 
