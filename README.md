@@ -190,6 +190,7 @@ you can go to http://yoursite.local/your_migration_name to run the script
 ## <span id="todo">To-do</span>
 - [ ] Improve documentation, particularly `$mapping['columns']`
 - [ ] Rewrite into OOP
+- [ ] Integrate with composer
 - [ ] Better error handling / logging
 - [ ] Go through to-dos in code
 - [ ] Remove legacy / unused / test code
